@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: oficina_billing_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-oficina}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-oficina}
+      POSTGRES_DB: ${DB_NAME:-oficina_billing}
+    ports:
+      # 5433 on the host to avoid clashing with oficina-os-service (5432).
+      - '5433:5432'
+    volumes:
+      - billing_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-oficina}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  localstack:
+    image: localstack/localstack:3.8
+    container_name: oficina_billing_localstack
+    restart: unless-stopped
+    environment:
+      SERVICES: sns,sqs
+    ports:
+      # Same port as oficina-os-service's localstack: run only one of the two
+      # stacks at a time, or change the host port here and in AWS_ENDPOINT_URL.
+      - '4566:4566'
+    volumes:
+      - ./scripts/localstack/init-sns.sh:/etc/localstack/init/ready.d/init-sns.sh
+
+volumes:
+  billing_postgres_data:
