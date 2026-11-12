@@ -1,0 +1,49 @@
+# Namespace is intentionally not declared: applied with `kubectl apply -n $NAMESPACE`.
+# `${APP_IMAGE}` is substituted by the pipeline via envsubst.
+# Migrations run as a separate Job (migration-job.yaml) before the rollout.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oficina-billing-service
+  labels:
+    app: oficina-billing-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: oficina-billing-service
+  template:
+    metadata:
+      labels:
+        app: oficina-billing-service
+    spec:
+      containers:
+        - name: oficina-billing-service
+          image: ${APP_IMAGE}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: oficina-billing-service-config
+            - secretRef:
+                name: oficina-billing-service-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /billing/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /billing/health
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 20
