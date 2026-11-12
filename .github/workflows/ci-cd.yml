@@ -176,6 +176,8 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SNS_TOPIC_ARN: ${{ secrets.SNS_TOPIC_ARN }}
           SQS_QUEUE_URL: ${{ secrets.SQS_QUEUE_URL }}
+          # Mesmo valor do OS: o guard valida os tokens emitidos por ele.
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
           # Chave do usuario IAM do pod (so mensageria). NAO sao as chaves de
           # deploy do repositorio, que tem AdministratorAccess.
           POD_AWS_ACCESS_KEY_ID: ${{ secrets.POD_AWS_ACCESS_KEY_ID }}
@@ -190,11 +192,17 @@ jobs:
           else
             echo "::warning::POD_AWS_ACCESS_KEY_ID/POD_AWS_SECRET_ACCESS_KEY ausentes: o pod nao tera credencial AWS (publisher do outbox falhara)."
           fi
+          # Sem JWT_SECRET o app aborta no boot (fail fast do JwtAuthGuard).
+          if [ -z "$JWT_SECRET" ]; then
+            echo "::error::JWT_SECRET ausente no environment prod: o pod nao sobe sem ele."
+            exit 1
+          fi
           kubectl create secret generic oficina-billing-service-secret \
             --namespace "$NAMESPACE" \
             --from-literal=DATABASE_URL="$DATABASE_URL" \
             --from-literal=SNS_TOPIC_ARN="$SNS_TOPIC_ARN" \
             --from-literal=SQS_QUEUE_URL="$SQS_QUEUE_URL" \
+            --from-literal=JWT_SECRET="$JWT_SECRET" \
             "${POD_AWS_ARGS[@]}" \
             --dry-run=client -o yaml | kubectl apply -f -
 
