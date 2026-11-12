@@ -34,3 +34,23 @@ model MensagemProcessada {
 
   @@map("mensagens_processadas")
 }
+
+enum StatusOrcamento {
+  GERADO
+  APROVADO
+  REPROVADO
+}
+
+model Orcamento {
+  id               String          @id @default(uuid())
+  osId             String          @unique @map("os_id")
+  clienteId        String?         @map("cliente_id")
+  status           StatusOrcamento
+  valorTotal       Decimal         @map("valor_total") @db.Decimal(10, 2)
+  motivoReprovacao String?         @map("motivo_reprovacao") @db.Text
+  correlationId    String?         @map("correlation_id")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  @@map("orcamentos")
+}
