@@ -19,3 +19,5 @@ data:
   # Gateway simulado: checkout_url publico (API Gateway) e webhook interno.
   GATEWAY_PUBLIC_BASE_URL: "https://7eu2kz40xj.execute-api.us-east-1.amazonaws.com/prod"
   PAYMENT_WEBHOOK_URL: "http://oficina-billing-service.prod.svc.cluster.local/billing/webhooks/pagamento"
+  # Adapter de pagamento -> gateway simulado (chamada interna ao cluster).
+  GATEWAY_INTERNAL_BASE_URL: "http://oficina-billing-service.prod.svc.cluster.local/gateway"
