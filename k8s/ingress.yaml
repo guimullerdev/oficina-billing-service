@@ -1,0 +1,27 @@
+# Namespace decided by `kubectl apply -n $NAMESPACE`.
+# No host and no rewrite: only the billing paths are routed to this service.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oficina-billing-service
+  labels:
+    app: oficina-billing-service
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /billing
+            pathType: Prefix
+            backend:
+              service:
+                name: oficina-billing-service
+                port:
+                  number: 80
+          - path: /gateway
+            pathType: Prefix
+            backend:
+              service:
+                name: oficina-billing-service
+                port:
+                  number: 80

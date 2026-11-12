@@ -1,0 +1,36 @@
+# Prisma migrations run inside the cluster (the database is not publicly reachable).
+# `${APP_IMAGE}` and `${MIGRATION_JOB_NAME}` are substituted by the pipeline.
+# The name carries the build SHA because Jobs are immutable.
+# No securityContext is set: the image already runs as the non-root `node` user.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${MIGRATION_JOB_NAME}
+  labels:
+    app: oficina-billing-service
+    component: migration
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: oficina-billing-service
+        component: migration
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ${APP_IMAGE}
+          command: ["npx", "prisma", "migrate", "deploy"]
+          envFrom:
+            - secretRef:
+                name: oficina-billing-service-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
