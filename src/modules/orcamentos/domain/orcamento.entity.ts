@@ -13,6 +13,23 @@ export class OrcamentoTransicaoInvalidaError extends Error {
   }
 }
 
+export enum TipoItemOrcamento {
+  SERVICO = 'SERVICO',
+  PECA = 'PECA',
+}
+
+/** Item do orçamento: snapshot do diagnóstico, nunca alterado depois. */
+export interface OrcamentoItem {
+  readonly id: string;
+  readonly tipo: TipoItemOrcamento;
+  readonly refId: string;
+  readonly descricao: string;
+  readonly quantidade: number;
+  readonly precoUnitario: Dinheiro;
+}
+
+export type NovoOrcamentoItem = Omit<OrcamentoItem, 'id'>;
+
 export interface OrcamentoProps {
   id: string;
   osId: string;
@@ -23,17 +40,36 @@ export interface OrcamentoProps {
   correlationId?: string;
   createdAt: Date;
   updatedAt: Date;
+  itens?: readonly OrcamentoItem[];
 }
 
+const congelarItens = (
+  itens: readonly OrcamentoItem[] = [],
+): readonly OrcamentoItem[] =>
+  Object.freeze(itens.map((item) => Object.freeze({ ...item })));
+
 export class Orcamento {
-  private constructor(private readonly props: OrcamentoProps) {}
+  private readonly props: OrcamentoProps & {
+    itens: readonly OrcamentoItem[];
+  };
+
+  private constructor(props: OrcamentoProps) {
+    this.props = { ...props, itens: congelarItens(props.itens) };
+  }
 
   static create(input: {
     osId: string;
     clienteId?: string;
     valorTotal: Dinheiro;
     correlationId?: string;
+    itens?: readonly NovoOrcamentoItem[];
   }): Orcamento {
+    const itens = (input.itens ?? []).map((item) => {
+      if (!Number.isInteger(item.quantidade) || item.quantidade <= 0) {
+        throw new Error('Quantidade do item deve ser um inteiro positivo');
+      }
+      return { ...item, id: crypto.randomUUID() };
+    });
     const now = new Date();
     return new Orcamento({
       id: crypto.randomUUID(),
@@ -44,11 +80,12 @@ export class Orcamento {
       correlationId: input.correlationId,
       createdAt: now,
       updatedAt: now,
+      itens,
     });
   }
 
   static restore(props: OrcamentoProps): Orcamento {
-    return new Orcamento({ ...props });
+    return new Orcamento(props);
   }
 
   get id(): string {
@@ -77,6 +114,9 @@ export class Orcamento {
   }
   get updatedAt(): Date {
     return this.props.updatedAt;
+  }
+  get itens(): readonly OrcamentoItem[] {
+    return this.props.itens;
   }
 
   aprovar(): Orcamento {

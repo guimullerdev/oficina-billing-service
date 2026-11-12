@@ -11,12 +11,12 @@ export interface EventContext {
 export const ORCAMENTO_AGGREGATE_TYPE = 'orcamento';
 
 /**
- * Monta o evento de decisão do orçamento. O correlationId da saga (gravado no
- * orçamento) tem precedência; na ausência, segue a convenção do os-service
- * (contexto da requisição ou um UUID novo).
+ * Monta o evento do orçamento (geração ou decisão). O correlationId da saga
+ * (gravado no orçamento) tem precedência; na ausência, segue a convenção do
+ * os-service (contexto da requisição ou um UUID novo).
  */
 export function buildOrcamentoEvent(
-  evento: 'orcamento.aprovado' | 'orcamento.reprovado',
+  evento: 'orcamento.gerado' | 'orcamento.aprovado' | 'orcamento.reprovado',
   orcamento: Orcamento,
   extraPayload: Record<string, unknown>,
   ctx?: EventContext,

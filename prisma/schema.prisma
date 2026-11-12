@@ -51,6 +51,26 @@ model Orcamento {
   correlationId    String?         @map("correlation_id")
   createdAt        DateTime        @default(now()) @map("created_at")
   updatedAt        DateTime        @updatedAt @map("updated_at")
+  itens            OrcamentoItem[]
 
   @@map("orcamentos")
+}
+
+enum TipoItemOrcamento {
+  SERVICO
+  PECA
+}
+
+model OrcamentoItem {
+  id            String            @id @default(uuid())
+  orcamentoId   String            @map("orcamento_id")
+  orcamento     Orcamento         @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
+  tipo          TipoItemOrcamento
+  refId         String            @map("ref_id")
+  descricao     String
+  quantidade    Int
+  precoUnitario Decimal           @map("preco_unitario") @db.Decimal(10, 2)
+
+  @@index([orcamentoId])
+  @@map("orcamento_itens")
 }

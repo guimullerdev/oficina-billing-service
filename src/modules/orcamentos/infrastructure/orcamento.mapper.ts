@@ -1,9 +1,23 @@
-import { Prisma, Orcamento as OrcamentoRow } from '@prisma/client';
+import {
+  Prisma,
+  Orcamento as OrcamentoRow,
+  OrcamentoItem as OrcamentoItemRow,
+} from '@prisma/client';
 import { Dinheiro } from '../domain/dinheiro.vo';
-import { Orcamento, StatusOrcamento } from '../domain/orcamento.entity';
+import {
+  Orcamento,
+  StatusOrcamento,
+  TipoItemOrcamento,
+} from '../domain/orcamento.entity';
+
+export type OrcamentoComItensRow = OrcamentoRow & {
+  itens?: OrcamentoItemRow[];
+};
+
+export type OrcamentoItemPersistence = Omit<OrcamentoItemRow, 'orcamentoId'>;
 
 export class OrcamentoMapper {
-  static toDomain(row: OrcamentoRow): Orcamento {
+  static toDomain(row: OrcamentoComItensRow): Orcamento {
     return Orcamento.restore({
       id: row.id,
       osId: row.osId,
@@ -14,6 +28,14 @@ export class OrcamentoMapper {
       correlationId: row.correlationId ?? undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      itens: (row.itens ?? []).map((item) => ({
+        id: item.id,
+        tipo: item.tipo as TipoItemOrcamento,
+        refId: item.refId,
+        descricao: item.descricao,
+        quantidade: item.quantidade,
+        precoUnitario: Dinheiro.create(item.precoUnitario.toNumber()),
+      })),
     });
   }
 
@@ -29,5 +51,16 @@ export class OrcamentoMapper {
       createdAt: orcamento.createdAt,
       updatedAt: orcamento.updatedAt,
     };
+  }
+
+  static itensToPersistence(orcamento: Orcamento): OrcamentoItemPersistence[] {
+    return orcamento.itens.map((item) => ({
+      id: item.id,
+      tipo: item.tipo,
+      refId: item.refId,
+      descricao: item.descricao,
+      quantidade: item.quantidade,
+      precoUnitario: new Prisma.Decimal(item.precoUnitario.getValue()),
+    }));
   }
 }
