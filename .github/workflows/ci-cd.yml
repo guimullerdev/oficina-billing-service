@@ -182,6 +182,11 @@ jobs:
           # deploy do repositorio, que tem AdministratorAccess.
           POD_AWS_ACCESS_KEY_ID: ${{ secrets.POD_AWS_ACCESS_KEY_ID }}
           POD_AWS_SECRET_ACCESS_KEY: ${{ secrets.POD_AWS_SECRET_ACCESS_KEY }}
+          # Gateway de pagamento simulado (/gateway) e assinatura do webhook.
+          GATEWAY_CLIENT_ID: ${{ secrets.GATEWAY_CLIENT_ID }}
+          GATEWAY_CLIENT_SECRET: ${{ secrets.GATEWAY_CLIENT_SECRET }}
+          GATEWAY_JWT_SECRET: ${{ secrets.GATEWAY_JWT_SECRET }}
+          PAYMENT_WEBHOOK_SECRET: ${{ secrets.PAYMENT_WEBHOOK_SECRET }}
         run: |
           # Sem a chave, o pod cairia na cadeia padrao do SDK e o publisher
           # falharia com AccessDenied: melhor avisar alto no deploy.
@@ -191,6 +196,19 @@ jobs:
             POD_AWS_ARGS+=(--from-literal=AWS_SECRET_ACCESS_KEY="$POD_AWS_SECRET_ACCESS_KEY")
           else
             echo "::warning::POD_AWS_ACCESS_KEY_ID/POD_AWS_SECRET_ACCESS_KEY ausentes: o pod nao tera credencial AWS (publisher do outbox falhara)."
+          fi
+          # O app sobe sem eles; so o gateway simulado responde 503.
+          GATEWAY_ARGS=()
+          GATEWAY_MISSING=()
+          for name in GATEWAY_CLIENT_ID GATEWAY_CLIENT_SECRET GATEWAY_JWT_SECRET PAYMENT_WEBHOOK_SECRET; do
+            if [ -n "${!name}" ]; then
+              GATEWAY_ARGS+=(--from-literal="$name=${!name}")
+            else
+              GATEWAY_MISSING+=("$name")
+            fi
+          done
+          if [ "${#GATEWAY_MISSING[@]}" -gt 0 ]; then
+            echo "::warning::Secrets do gateway ausentes: ${GATEWAY_MISSING[*]} (endpoints /gateway responderao 503)."
           fi
           # Sem JWT_SECRET o app aborta no boot (fail fast do JwtAuthGuard).
           if [ -z "$JWT_SECRET" ]; then
@@ -204,6 +222,7 @@ jobs:
             --from-literal=SQS_QUEUE_URL="$SQS_QUEUE_URL" \
             --from-literal=JWT_SECRET="$JWT_SECRET" \
             "${POD_AWS_ARGS[@]}" \
+            "${GATEWAY_ARGS[@]}" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Aplicar ConfigMap

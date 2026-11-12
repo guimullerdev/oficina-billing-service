@@ -16,3 +16,6 @@ data:
   SQS_WAIT_TIME_SECONDS: "20"
   SQS_VISIBILITY_TIMEOUT_SECONDS: "30"
   SQS_MAX_MESSAGES: "10"
+  # Gateway simulado: checkout_url publico (API Gateway) e webhook interno.
+  GATEWAY_PUBLIC_BASE_URL: "https://7eu2kz40xj.execute-api.us-east-1.amazonaws.com/prod"
+  PAYMENT_WEBHOOK_URL: "http://oficina-billing-service.prod.svc.cluster.local/billing/webhooks/pagamento"

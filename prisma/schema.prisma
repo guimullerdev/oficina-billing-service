@@ -74,3 +74,26 @@ model OrcamentoItem {
   @@index([orcamentoId])
   @@map("orcamento_itens")
 }
+
+// Simulated payment gateway (src/fake-gateway). Standalone on purpose: no FK
+// to billing tables, as if it lived in a third-party provider.
+enum FakeGatewayPagamentoStatus {
+  pending
+  approved
+  declined
+}
+
+model FakeGatewayPagamento {
+  id             String                     @id @default(uuid())
+  idempotencyKey String                     @unique @map("idempotency_key")
+  clientId       String                     @map("client_id")
+  amountCents    Int                        @map("amount_cents")
+  currency       String                     @default("BRL")
+  description    String?
+  status         FakeGatewayPagamentoStatus @default(pending)
+  metadata       Json?
+  createdAt      DateTime                   @default(now()) @map("created_at")
+  updatedAt      DateTime                   @updatedAt @map("updated_at")
+
+  @@map("fake_gateway_pagamentos")
+}
