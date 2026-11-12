@@ -22,8 +22,7 @@ export class LogOnlyHandler implements MessageHandler {
 }
 
 // `diagnostico.concluido` é tratado pelo DiagnosticoConcluidoHandler
-// (OrcamentosModule); registrá-lo aqui também causaria erro de duplicidade.
-export const LOG_ONLY_EVENTOS = [
-  'os.criada',
-  'os.cobranca.solicitada',
-] as const;
+// (OrcamentosModule) e `os.cobranca.solicitada` pelo
+// CobrancaSolicitadaHandler (CobrancasModule); registrá-los aqui também
+// causaria erro de duplicidade.
+export const LOG_ONLY_EVENTOS = ['os.criada'] as const;

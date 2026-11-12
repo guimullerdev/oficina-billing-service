@@ -24,7 +24,7 @@ describe('LogOnlyHandler', () => {
     spy.mockRestore();
   });
 
-  it('does not cover diagnostico.concluido (handled by OrcamentosModule)', () => {
-    expect(LOG_ONLY_EVENTOS).toEqual(['os.criada', 'os.cobranca.solicitada']);
+  it('does not cover events with real handlers (diagnostico.concluido, os.cobranca.solicitada)', () => {
+    expect(LOG_ONLY_EVENTOS).toEqual(['os.criada']);
   });
 });

@@ -75,6 +75,32 @@ model OrcamentoItem {
   @@map("orcamento_itens")
 }
 
+enum StatusCobranca {
+  PENDENTE
+  CONFIRMADA
+  RECUSADA
+}
+
+// Charge of an OS. `orcamento_id` is a plain column on purpose (no FK): the
+// cobrancas module stays decoupled from the orcamentos tables, and a RECUSADA
+// charge may exist without any orcamento (motivo = orcamento_inexistente).
+model Cobranca {
+  id               String         @id @default(uuid())
+  osId             String         @unique @map("os_id")
+  orcamentoId      String?        @map("orcamento_id")
+  gatewayPaymentId String?        @unique @map("gateway_payment_id")
+  valor            Decimal        @db.Decimal(10, 2)
+  status           StatusCobranca
+  checkoutUrl      String?        @map("checkout_url")
+  correlationId    String?        @map("correlation_id")
+  sagaId           String?        @map("saga_id")
+  motivo           String?        @db.Text
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  @@map("cobrancas")
+}
+
 // Simulated payment gateway (src/fake-gateway). Standalone on purpose: no FK
 // to billing tables, as if it lived in a third-party provider.
 enum FakeGatewayPagamentoStatus {
