@@ -17,7 +17,8 @@
     "lint:ci": "eslint \"{src,apps,libs,test}/**/*.ts\" --max-warnings=0",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:cov": "jest --coverage"
+    "test:cov": "jest --coverage",
+    "seed:orcamento": "ts-node scripts/seed-orcamento.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sns": "^3.1165.0",
