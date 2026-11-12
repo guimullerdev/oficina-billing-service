@@ -5,7 +5,9 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: keeps req.rawBody (Buffer) alongside the parsed JSON body, so the
+  // payment webhook can verify its HMAC signature over the exact bytes sent.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // Gateway webhooks (e.g. payment provider callbacks) stay outside the
   // /billing prefix. Nest 11 uses path-to-regexp v8: wildcards must be named.

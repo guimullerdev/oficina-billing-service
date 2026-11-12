@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { PrismaService } from '../../prisma/prisma.service';
 import { MessageHandlerRegistry } from '../../shared/messaging/handlers/message-handler.registry';
 import { MessagingModule } from '../../shared/messaging/messaging.module';
 import { OutboxWriter } from '../../shared/messaging/outbox.writer';
@@ -16,6 +17,7 @@ import {
   PaymentGateway,
 } from './application/ports/payment-gateway.port';
 import { GetCobrancaByOsUseCase } from './application/use-cases/get-cobranca-by-os.usecase';
+import { ProcessarWebhookPagamentoUseCase } from './application/use-cases/processar-webhook-pagamento.usecase';
 import { SolicitarCobrancaUseCase } from './application/use-cases/solicitar-cobranca.usecase';
 import {
   COBRANCA_REPOSITORY,
@@ -27,10 +29,11 @@ import {
 } from './infrastructure/http-payment-gateway';
 import { PrismaCobrancaRepository } from './infrastructure/prisma-cobranca.repository';
 import { CobrancasController } from './presentation/cobrancas.controller';
+import { WebhookPagamentoController } from './presentation/webhook-pagamento.controller';
 
 @Module({
   imports: [AuthModule, MessagingModule],
-  controllers: [CobrancasController],
+  controllers: [CobrancasController, WebhookPagamentoController],
   providers: [
     // OutboxWriter é stateless e não é exportado pelo MessagingModule.
     OutboxWriter,
@@ -68,6 +71,27 @@ import { CobrancasController } from './presentation/cobrancas.controller';
         COBRANCA_REPOSITORY,
         ORCAMENTO_REPOSITORY,
         PAYMENT_GATEWAY,
+        OutboxWriter,
+      ],
+    },
+    {
+      provide: ProcessarWebhookPagamentoUseCase,
+      useFactory: (
+        cobrancas: CobrancaRepository,
+        gateway: PaymentGateway,
+        prisma: PrismaService,
+        outbox: OutboxWriter,
+      ) =>
+        new ProcessarWebhookPagamentoUseCase(
+          cobrancas,
+          gateway,
+          prisma,
+          outbox,
+        ),
+      inject: [
+        COBRANCA_REPOSITORY,
+        PAYMENT_GATEWAY,
+        PrismaService,
         OutboxWriter,
       ],
     },
