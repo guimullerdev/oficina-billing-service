@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
 import { HealthModule } from './modules/health/health.module';
+import { MessagingModule } from './shared/messaging/messaging.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
@@ -9,6 +10,7 @@ import { PrismaModule } from './prisma/prisma.module';
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     HealthModule,
+    MessagingModule,
   ],
 })
 export class AppModule {}
