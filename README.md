@@ -259,7 +259,52 @@ yarn test:cov      # jest --coverage; falha abaixo de 80% (statements, branches,
 - Cobertura exclui `*.module.ts`, `main.ts`, `*.dto.ts` e `*.spec.ts`; o relatório lcov vai para `coverage/lcov.info`.
 - Sonar: projeto `guimullerdev_oficina-billing-service` (`sonar-project.properties`). O passo do CI só roda quando o secret `SONAR_TOKEN` existe e usa a variável de repositório `SONAR_ORGANIZATION`, com `sonar.qualitygate.wait=true` (timeout 300 s).
 
-Evidência de cobertura: _[inserir print/link do relatório de `yarn test:cov` e do dashboard do Sonar]_
+Evidência de cobertura (`yarn test:cov` na `main`): 407 testes em 40 suítes; cobertura de 98,84% de linhas, 91,95% de branches e 98,43% de funções (threshold global 80%). Dashboard do SonarQube Cloud: https://sonarcloud.io/project/overview?id=guimullerdev_oficina-billing-service
+
+### 8.1 Validação ponta a ponta da saga (`scripts/e2e-prod.sh`)
+
+O script valida a saga da OS contra o ambiente publicado (OS + Billing + gateway fake de pagamento). Cada cenário abre uma OS nova, leva o diagnóstico até o orçamento e exercita um desfecho da saga.
+
+Cenários (`SCENARIOS`, default `feliz reprovado recusado`):
+
+| Cenário | Ação | Estado final esperado |
+|---|---|---|
+| `feliz` | aprova o orçamento e paga no checkout (`aprovar`) | saga `CONCLUIDA` (passo `CONFIRMAR` concluído); cobrança `CONFIRMADA` |
+| `reprovado` | reprova o orçamento | saga `COMPENSADA`; OS `REPROVADA` |
+| `recusado` | aprova o orçamento e recusa no checkout (`recusar`) | saga `PENDENTE`; cobrança `RECUSADA` |
+
+Os cenários `feliz` e `recusado` precisam do `oficina-execucao-service` implantado: a saga passa pelo passo `EXECUTAR` antes de `COBRAR`. Sem ele, a saga fica travada em `EXECUTAR` (`EM_ANDAMENTO`) e o script falha com timeout no passo `COBRAR`.
+
+O script consulta `GET /os/:id/saga` a cada `POLL_INTERVAL` segundos, com até `STEP_TIMEOUT` segundos por passo, e sai com código != 0 no primeiro passo que falhar.
+
+Variáveis de ambiente:
+
+| Variável | Default | Descrição |
+|---|---|---|
+| `API_BASE` | `https://7eu2kz40xj.execute-api.us-east-1.amazonaws.com/prod` | URL base do stage |
+| `OS_EMAIL` | obrigatória | e-mail do usuário staff |
+| `OS_PASSWORD` | obrigatória | senha do usuário staff (nunca é impressa) |
+| `STEP_TIMEOUT` | `30` | segundos máximos de espera por passo |
+| `POLL_INTERVAL` | `2` | segundos entre consultas |
+| `SCENARIOS` | `feliz reprovado recusado` | cenários a rodar, separados por espaço |
+| `CHECK_DLQ` | `auto` | `auto`, `1` (estrito) ou `0` (não verifica a DLQ) |
+| `AWS_REGION` | `us-east-1` | região das chamadas `aws` |
+| `CHECK_LOGS` | `0` | `1` exige a linha `correlationId=<id>` nos logs após cada cenário |
+| `K8S_NAMESPACE` | `prod` | namespace dos pods do billing |
+| `K8S_SELECTOR` | `app=oficina-billing-service` | label selector dos pods do billing |
+| `LOGS_SINCE` | `15m` | janela de logs do `kubectl` |
+| `CLIENTE_ID` | opcional | cliente existente; sem isso um cliente é criado |
+| `VEICULO_ID` | opcional | veículo existente do `CLIENTE_ID`; sem isso um é criado |
+
+Verificação da DLQ (`oficina-billing-dlq`, via `aws sqs`): com `CHECK_DLQ=auto`, sem `aws` CLI ou com a fila não resolvida, o script avisa que a verificação foi ignorada e segue; com fila que tem mensagens, sempre falha. Com `CHECK_DLQ=1`, qualquer impossibilidade de ler a fila também falha.
+
+Verificação de correlationId (`CHECK_LOGS=1`): após cada cenário, o script lê o `correlationId` da saga e procura a linha `correlationId=<id>` em `kubectl logs` dos pods do billing (`K8S_NAMESPACE`, `K8S_SELECTOR`, `LOGS_SINCE`). Sem `kubectl` ou com falha na leitura dos logs, o script encerra com erro.
+
+Exemplo:
+
+```bash
+OS_EMAIL=<email> OS_PASSWORD=<senha> SCENARIOS="feliz recusado" CHECK_LOGS=1 scripts/e2e-prod.sh
+```
 
 ## 9. Deploy
 
