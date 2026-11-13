@@ -24,7 +24,7 @@ Variáveis de ambiente:
                    reprovado reprova orçamento, OS REPROVADA, saga COMPENSADA
                    recusado  aprova orçamento, recusa no checkout, saga PENDENTE
                    falhou    (opt-in) aprova orçamento, execução falha (PATCH /execucao/:id/falhar),
-                             saga COMPENSADA, passo EXECUTAR COMPENSADO, OS volta a APROVADA
+                             saga COMPENSADA, passo EXECUTAR COMPENSADO
                  feliz e recusado passam pelo passo EXECUTAR: o script espera a execução
                  RECEBIDA e chama iniciar/finalizar em $API_BASE/execucao/:osId
   DLQ_NAMES      DLQs verificadas, separadas por espaço
@@ -387,9 +387,8 @@ cenario_falhou() {
   begin
   poll "saga COMPENSADA" "/os/$OS_ID/saga" "$(saga_status COMPENSADA) and ($(saga_passo EXECUTAR COMPENSADO))"
   ok "saga COMPENSADA (EXECUTAR compensado)"
-  begin
-  poll "OS APROVADA (OS_VOLTA_APROVADA)" "/os/$OS_ID" '.status == "APROVADA"'
-  ok "OS de volta em APROVADA"
+  # O status da OS não é checado: o OS não move a OS para EM_EXECUCAO durante a
+  # saga, e OS_VOLTA_APROVADA só transiciona a partir de EM_EXECUCAO (no-op aqui).
   printf '  osId=%s\n' "$OS_ID"
 }
 

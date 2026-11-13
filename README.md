@@ -272,7 +272,7 @@ Cenários (`SCENARIOS`, default `feliz reprovado recusado`; `falhou` é opt-in):
 | `feliz` | aprova o orçamento, executa e paga no checkout (`aprovar`) | saga `CONCLUIDA` (passo `CONFIRMAR` concluído); cobrança `CONFIRMADA` |
 | `reprovado` | reprova o orçamento | saga `COMPENSADA`; OS `REPROVADA` |
 | `recusado` | aprova o orçamento, executa e recusa no checkout (`recusar`) | saga `PENDENTE`; cobrança `RECUSADA` |
-| `falhou` | aprova o orçamento e marca a execução como falha (`PATCH /execucao/:id/falhar`) | saga `COMPENSADA` (passo `EXECUTAR` `COMPENSADO`); compensação `OS_VOLTA_APROVADA`; OS volta a `APROVADA` |
+| `falhou` | aprova o orçamento e marca a execução como falha (`PATCH /execucao/:id/falhar`) | saga `COMPENSADA` (passo `EXECUTAR` `COMPENSADO`); o status da OS não é checado (ver débitos) |
 
 A saga tem o passo `EXECUTAR`, servido pelo `oficina-execucao-service`. Os cenários `feliz` e `recusado` esperam a execução `RECEBIDA` (`GET /execucao/:osId`) e chamam `PATCH /execucao/:osId/iniciar` e `PATCH /execucao/:osId/finalizar` com o mesmo token de staff. Sem o `oficina-execucao-service` implantado, a saga fica travada em `EXECUTAR` (`EM_ANDAMENTO`) e o script falha com timeout no passo `COBRAR`.
 
@@ -336,6 +336,7 @@ Operação em janela paga (subir/derrubar o ambiente): [oficina-infra-k8s/docs/r
 ## 10. Débitos declarados
 
 - `execucao.falhou` não é consumido: não há cancelamento/estorno de cobrança quando a execução falha.
+- O status da OS não acompanha a saga: o `oficina-os-service` não move a OS para `APROVADA`/`EM_EXECUCAO` durante o fluxo, então a compensação `OS_VOLTA_APROVADA` (que só age a partir de `EM_EXECUCAO`) vira no-op e a OS fica em `AGUARDANDO_APROVACAO`. O e2e checa a saga, não o status da OS.
 - O catálogo de serviços e peças fica no `oficina-os-service`; o Billing guarda só `refId`, `descricao`, quantidade e preço recebidos no evento. Como o OS não guarda o nome das peças nos itens da OS, elas chegam descritas como "Peça <id>".
 - Credencial AWS do pod é uma chave IAM estática, sem IRSA.
 - A chamada HTTP ao gateway acontece dentro da transação do `IdempotentProcessor` (segura uma conexão do pool; timeout de 5 s). Se o commit falhar depois do pagamento criado, a mensagem é reentregue e a `Idempotency-Key` (`sagaId:osId`) faz o gateway devolver o mesmo pagamento.
