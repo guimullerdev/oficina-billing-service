@@ -192,7 +192,7 @@ A assinatura é calculada sobre os bytes recebidos e comparada em tempo constant
 | `OUTBOX_PUBLISH_INTERVAL_MS` | configmap / .env | não (5000) | intervalo da varredura |
 | `OUTBOX_BATCH_SIZE` | configmap / .env | não (50) | linhas por lote |
 | `SQS_QUEUE_URL` | secret / .env | sim para consumir | fila `oficina-billing-queue`; sem ela o consumidor não inicia |
-| `SQS_CONSUMER_ENABLED` | configmap / .env | não | `true` liga o consumidor (no configmap versionado está `"false"`) |
+| `SQS_CONSUMER_ENABLED` | configmap / .env | não | `true` liga o consumidor (no configmap versionado está `"true"`; exige `SQS_QUEUE_URL`) |
 | `SQS_WAIT_TIME_SECONDS` | configmap / .env | não (20) | long poll |
 | `SQS_VISIBILITY_TIMEOUT_SECONDS` | configmap / .env | não (30) | visibility timeout do receive |
 | `SQS_MAX_MESSAGES` | configmap / .env | não (10) | mensagens por poll (máx. 10) |
