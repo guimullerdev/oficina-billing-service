@@ -9,7 +9,13 @@ COPY package.json yarn.lock ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./
 
-RUN yarn install --frozen-lockfile --production
+# --ignore-scripts: nenhum script de ciclo de vida de dependência roda no
+# install. Os dois necessários são chamados explicitamente: o download das
+# engines do Prisma (usadas pelo `prisma migrate deploy` do Job de migration)
+# e a geração do client.
+RUN yarn install --frozen-lockfile --production --ignore-scripts \
+ && node node_modules/@prisma/engines/scripts/postinstall.js \
+ && yarn prisma generate
 
 ### builder stage: install all deps (incl. dev) and compile TypeScript
 FROM node:24.13.1-alpine AS builder
@@ -22,7 +28,8 @@ COPY package.json yarn.lock ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./
 
-RUN yarn install --frozen-lockfile
+RUN yarn install --frozen-lockfile --ignore-scripts \
+ && yarn prisma generate
 
 COPY . .
 

@@ -19,6 +19,8 @@ spec:
         app: oficina-billing-service
         component: migration
     spec:
+      # O Job não fala com a API do Kubernetes: sem token de service account.
+      automountServiceAccountToken: false
       restartPolicy: Never
       containers:
         - name: migrate

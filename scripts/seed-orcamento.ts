@@ -30,9 +30,12 @@ function signJwt(secret: string): string {
 }
 
 async function main() {
-  const databaseUrl =
-    process.env.DATABASE_URL ??
-    'postgresql://oficina:oficina@localhost:5433/oficina_billing';
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error(
+      'DATABASE_URL não definida: copie .env.example para .env ou exporte a variável.',
+    );
+  }
   const secret = process.env.JWT_SECRET ?? 'change-me';
 
   const prisma = new PrismaClient({
