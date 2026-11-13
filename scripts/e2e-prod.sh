@@ -277,9 +277,13 @@ expect_204() {
 
 # Passo EXECUTAR da saga: espera a execução RECEBIDA (404 até o comando chegar)
 # e só então chama os PATCH do oficina-execucao-service.
+# 1 quando o cenário atual chegou ao passo EXECUTAR; só então o execucao loga o correlationId.
+EXECUCAO_ALCANCADA=0
+
 aguardar_execucao_recebida() {
   begin
   poll "execução RECEBIDA (passo EXECUTAR)" "/execucao/$OS_ID" '.execucao.status == "RECEBIDA"'
+  EXECUCAO_ALCANCADA=1
   ok "execução RECEBIDA"
 }
 
@@ -442,7 +446,10 @@ checar_logs() {
   expect_2xx "consultar saga para correlationId"
   cid=$(jget '.correlationId // empty')
   [ -n "$cid" ] || fail "saga sem correlationId na resposta" "$LAST_BODY"
-  for svc in billing execucao; do
+  local svcs="billing"
+  # Cenários que param antes de EXECUTAR (ex.: reprovado) nunca chegam ao execucao.
+  [ "$EXECUCAO_ALCANCADA" = "1" ] && svcs="billing execucao"
+  for svc in $svcs; do
     sel="$K8S_SELECTOR"; [ "$svc" = "billing" ] || sel="$K8S_EXEC_SELECTOR"
     logs=$(kubectl logs -n "$K8S_NAMESPACE" -l "$sel" --all-containers --prefix=false \
       --since="$LOGS_SINCE" --tail=-1 2>/dev/null) \
@@ -463,6 +470,7 @@ ensure_cliente_veiculo
 for sc in $SCENARIOS; do
   printf '\n== cenário: %s\n' "$sc"
   SUMMARY="${SUMMARY}[$sc]"$'\n'
+  EXECUCAO_ALCANCADA=0
   case "$sc" in
     feliz) cenario_feliz ;;
     reprovado) cenario_reprovado ;;
