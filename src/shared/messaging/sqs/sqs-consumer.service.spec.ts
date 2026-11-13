@@ -157,6 +157,50 @@ describe('SqsConsumerService', () => {
       expect(deletes()).toHaveLength(0);
     });
 
+    it('loga evento, eventId e correlationId de cada mensagem processada', async () => {
+      const logSpy = jest.spyOn(Logger.prototype, 'log');
+      sqsMock.on(ReceiveMessageCommand).resolves({ Messages: [message()] });
+
+      await consumer.pollOnce();
+
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'evento=os.criada eventId=evt-1 correlationId=corr-1',
+        ),
+      );
+    });
+
+    it('inclui o correlationId no log de falha do handler', async () => {
+      processor.process.mockRejectedValue(new Error('boom'));
+      sqsMock.on(ReceiveMessageCommand).resolves({ Messages: [message()] });
+
+      await consumer.pollOnce();
+
+      expect(errorLog).toHaveBeenCalledWith(
+        expect.stringContaining('correlationId=corr-1'),
+      );
+    });
+
+    it('usa "-" quando o correlationId está ausente', async () => {
+      const logSpy = jest.spyOn(Logger.prototype, 'log');
+      sqsMock.on(ReceiveMessageCommand).resolves({
+        Messages: [
+          message({
+            MessageAttributes: {
+              evento: attr('os.criada'),
+              eventId: attr('evt-1'),
+            },
+          }),
+        ],
+      });
+
+      await consumer.pollOnce();
+
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining('eventId=evt-1 correlationId=-'),
+      );
+    });
+
     it('processa e deleta a mensagem em caso de sucesso', async () => {
       sqsMock.on(ReceiveMessageCommand).resolves({ Messages: [message()] });
 

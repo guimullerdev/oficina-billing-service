@@ -117,6 +117,25 @@ describe('OutboxPublisher', () => {
       });
     });
 
+    it('logs evento, eventId and correlationId of each published row', async () => {
+      const logSpy = jest.spyOn(Logger.prototype, 'log');
+      tx.$queryRaw.mockResolvedValue([
+        row(),
+        row({ id: 'row-2', correlationId: null }),
+      ]);
+
+      await publisher.publishBatch();
+
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'evento=os.criada eventId=row-1 correlationId=corr-1',
+        ),
+      );
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining('eventId=row-2 correlationId=-'),
+      );
+    });
+
     it('omits correlationId and traceparent when absent', async () => {
       tx.$queryRaw.mockResolvedValue([
         row({ correlationId: '', traceparent: null }),

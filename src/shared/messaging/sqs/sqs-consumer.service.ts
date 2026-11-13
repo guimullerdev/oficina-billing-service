@@ -149,17 +149,25 @@ export class SqsConsumerService implements OnModuleInit, OnModuleDestroy {
   private async handleMessage(message: Message): Promise<void> {
     const messageId = message.MessageId ?? 'unknown';
     let evento: string | undefined;
+    let eventId: string | undefined;
+    let correlationId: string | undefined;
     try {
       const incoming = this.toIncoming(message);
       evento = incoming.evento;
+      eventId = incoming.eventId;
+      correlationId = incoming.correlationId;
       const handler = this.registry.resolve(incoming.evento);
       await this.processor.process(incoming, handler);
     } catch (err) {
       this.logger.error(
-        `Failed to process SQS message (messageId=${messageId}, evento=${evento ?? 'unknown'}): ${errorMessage(err)}`,
+        `Failed to process SQS message (messageId=${messageId}, evento=${evento ?? 'unknown'}, correlationId=${correlationId ?? '-'}): ${errorMessage(err)}`,
       );
       return;
     }
+
+    this.logger.log(
+      `consumido evento=${evento} eventId=${eventId ?? '-'} correlationId=${correlationId ?? '-'}`,
+    );
 
     try {
       await this.sqs.send(
