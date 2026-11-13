@@ -129,6 +129,9 @@ export class OutboxPublisher implements OnModuleInit, OnModuleDestroy {
               data: { publishedAt: new Date() },
             });
             result.published++;
+            this.logger.log(
+              `publicado evento=${row.evento} eventId=${row.id} correlationId=${row.correlationId ?? '-'}`,
+            );
           } catch (err) {
             result.failed++;
             const message = err instanceof Error ? err.message : String(err);
