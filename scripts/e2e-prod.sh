@@ -23,7 +23,13 @@ Variáveis de ambiente:
                    feliz     aprova orçamento, paga no checkout, saga CONCLUIDA
                    reprovado reprova orçamento, OS REPROVADA, saga COMPENSADA
                    recusado  aprova orçamento, recusa no checkout, saga PENDENTE
-  CHECK_DLQ      auto|1|0 verificação da fila oficina-billing-dlq via aws CLI (default: auto)
+                   falhou    (opt-in) aprova orçamento, execução falha (PATCH /execucao/:id/falhar),
+                             saga COMPENSADA, passo EXECUTAR COMPENSADO, OS volta a APROVADA
+                 feliz e recusado passam pelo passo EXECUTAR: o script espera a execução
+                 RECEBIDA e chama iniciar/finalizar em $API_BASE/execucao/:osId
+  DLQ_NAMES      DLQs verificadas, separadas por espaço
+                 (default: "oficina-billing-dlq oficina-execucao-queue-dlq oficina-os-dlq")
+  CHECK_DLQ      auto|1|0 verificação das DLQs (DLQ_NAMES) via aws CLI (default: auto)
                    auto  verifica se possível; sem aws CLI ou fila não resolvida,
                          avisa "ignorada" e segue (fila com mensagens sempre falha)
                    1     estrito: aws CLI ausente, fila não resolvida ou
@@ -31,10 +37,11 @@ Variáveis de ambiente:
                    0     não verifica
   AWS_REGION     região passada a todas as chamadas aws (default: us-east-1)
   CHECK_LOGS     1 exige, após cada cenário, uma linha correlationId=<id> nos logs
-                 dos pods do billing (via kubectl logs; default: 0). Com 1,
+                 dos pods do billing e do execucao (via kubectl logs; default: 0). Com 1,
                  kubectl ausente ou falhando encerra com erro
   K8S_NAMESPACE  namespace dos pods do billing (default: prod)
   K8S_SELECTOR   label selector dos pods do billing (default: app=oficina-billing-service)
+  K8S_EXEC_SELECTOR  label selector dos pods do execucao (default: app=oficina-execucao-service)
   LOGS_SINCE     janela de logs do kubectl (default: 15m)
   CLIENTE_ID     (opcional) cliente existente; sem isso um cliente é criado
   VEICULO_ID     (opcional) veículo existente do CLIENTE_ID; sem isso um é criado
@@ -55,11 +62,12 @@ STEP_TIMEOUT="${STEP_TIMEOUT:-30}"
 POLL_INTERVAL="${POLL_INTERVAL:-2}"
 SCENARIOS="${SCENARIOS:-feliz reprovado recusado}"
 CHECK_DLQ="${CHECK_DLQ:-auto}"
-DLQ_NAME="oficina-billing-dlq"
+DLQ_NAMES="${DLQ_NAMES:-oficina-billing-dlq oficina-execucao-queue-dlq oficina-os-dlq}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 CHECK_LOGS="${CHECK_LOGS:-0}"
 K8S_NAMESPACE="${K8S_NAMESPACE:-prod}"
 K8S_SELECTOR="${K8S_SELECTOR:-app=oficina-billing-service}"
+K8S_EXEC_SELECTOR="${K8S_EXEC_SELECTOR:-app=oficina-execucao-service}"
 LOGS_SINCE="${LOGS_SINCE:-15m}"
 
 case "$CHECK_DLQ" in
@@ -262,6 +270,29 @@ aprovar_orcamento() {
   ok "orçamento aprovado"
 }
 
+# expect_204 DESCRICAO
+expect_204() {
+  [ "$LAST_CODE" = "204" ] || fail "$1 (HTTP $LAST_CODE, esperado 204)" "$LAST_BODY"
+}
+
+# Passo EXECUTAR da saga: espera a execução RECEBIDA (404 até o comando chegar)
+# e só então chama os PATCH do oficina-execucao-service.
+aguardar_execucao_recebida() {
+  begin
+  poll "execução RECEBIDA (passo EXECUTAR)" "/execucao/$OS_ID" '.execucao.status == "RECEBIDA"'
+  ok "execução RECEBIDA"
+}
+
+executar_os() {
+  aguardar_execucao_recebida
+  begin
+  api PATCH "/execucao/$OS_ID/iniciar"
+  expect_204 "iniciar execução"
+  api PATCH "/execucao/$OS_ID/finalizar"
+  expect_204 "finalizar execução"
+  ok "execução iniciada e finalizada"
+}
+
 # Espera a cobrança (checkoutUrl) e devolve a URL absoluta em CHECKOUT_URL.
 CHECKOUT_URL=""
 aguardar_checkout() {
@@ -296,6 +327,7 @@ decidir_checkout() {
 cenario_feliz() {
   preparar_os
   aprovar_orcamento
+  executar_os
   aguardar_checkout
   decidir_checkout aprovar
   begin
@@ -304,6 +336,7 @@ cenario_feliz() {
   begin
   poll "cobrança CONFIRMADA" "/billing/cobrancas/by-os/$OS_ID" '.status == "CONFIRMADA"'
   ok "cobrança CONFIRMADA"
+  printf '  osId=%s\n  linha do tempo da execução: GET %s/execucao/%s\n' "$OS_ID" "$API_BASE" "$OS_ID"
 }
 
 cenario_reprovado() {
@@ -325,6 +358,7 @@ cenario_reprovado() {
 cenario_recusado() {
   preparar_os
   aprovar_orcamento
+  executar_os
   aguardar_checkout
   decidir_checkout recusar
   begin
@@ -335,44 +369,72 @@ cenario_recusado() {
   ok "cobrança RECUSADA"
 }
 
-# --- DLQ -----------------------------------------------------------------
-# Modo estrito (CHECK_DLQ=1): qualquer impossibilidade de ler a fila falha.
-dlq_indisponivel() { # MOTIVO
-  if [ "$CHECK_DLQ" = "1" ]; then
-    fail "DLQ $DLQ_NAME: $1" ""
-  fi
-  echo "  - $1: verificação da DLQ ignorada"
+# Falha na execução: saga compensa (EXECUTAR -> COMPENSADO, OS_VOLTA_APROVADA).
+cenario_falhou() {
+  local body
+  preparar_os
+  aprovar_orcamento
+  aguardar_execucao_recebida
+  begin
+  body=$(jq -n '{motivo:"e2e falhou"}')
+  api PATCH "/execucao/$OS_ID/falhar" "$body"
+  expect_204 "falhar execução"
+  ok "execução marcada como falha"
+  begin
+  poll "saga COMPENSADA" "/os/$OS_ID/saga" "$(saga_status COMPENSADA) and ($(saga_passo EXECUTAR COMPENSADO))"
+  ok "saga COMPENSADA (EXECUTAR compensado)"
+  begin
+  poll "OS APROVADA (OS_VOLTA_APROVADA)" "/os/$OS_ID" '.status == "APROVADA"'
+  ok "OS de volta em APROVADA"
+  printf '  osId=%s\n' "$OS_ID"
 }
 
-checar_dlq() {
-  local url n
-  [ "$CHECK_DLQ" != "0" ] || { echo "  - CHECK_DLQ=0: verificação da DLQ desativada"; return 0; }
-  begin
-  if ! command -v aws >/dev/null 2>&1; then
-    dlq_indisponivel "aws CLI ausente"
-    return 0
+# --- DLQ -----------------------------------------------------------------
+# Modo estrito (CHECK_DLQ=1): qualquer impossibilidade de ler a fila falha.
+dlq_indisponivel() { # FILA MOTIVO
+  if [ "$CHECK_DLQ" = "1" ]; then
+    fail "DLQ $1: $2" ""
   fi
-  url=$(aws --region "$AWS_REGION" sqs get-queue-url --queue-name "$DLQ_NAME" --query QueueUrl --output text 2>/dev/null) \
-    || { dlq_indisponivel "não consegui resolver a fila (credenciais/região $AWS_REGION?)"; return 0; }
+  echo "  - $2: verificação da DLQ $1 ignorada"
+}
+
+checar_dlq_fila() { # FILA
+  local q="$1" url n
+  begin
+  url=$(aws --region "$AWS_REGION" sqs get-queue-url --queue-name "$q" --query QueueUrl --output text 2>/dev/null) \
+    || { dlq_indisponivel "$q" "não consegui resolver a fila (credenciais/região $AWS_REGION?)"; return 0; }
   if [ -z "$url" ] || [ "$url" = "None" ]; then
-    dlq_indisponivel "URL da fila não resolvida"
+    dlq_indisponivel "$q" "URL da fila não resolvida"
     return 0
   fi
   n=$(aws --region "$AWS_REGION" sqs get-queue-attributes --queue-url "$url" \
     --attribute-names ApproximateNumberOfMessages \
     --query 'Attributes.ApproximateNumberOfMessages' --output text 2>/dev/null) \
-    || { dlq_indisponivel "get-queue-attributes falhou"; return 0; }
+    || { dlq_indisponivel "$q" "get-queue-attributes falhou"; return 0; }
   if [ "$n" = "0" ]; then
-    ok "DLQ $DLQ_NAME vazia"
+    ok "DLQ $q vazia"
   else
-    fail "DLQ $DLQ_NAME tem $n mensagem(ns)" ""
+    fail "DLQ $q tem $n mensagem(ns)" ""
   fi
+}
+
+checar_dlq() {
+  local q
+  [ "$CHECK_DLQ" != "0" ] || { echo "  - CHECK_DLQ=0: verificação da DLQ desativada"; return 0; }
+  begin
+  if ! command -v aws >/dev/null 2>&1; then
+    dlq_indisponivel "$DLQ_NAMES" "aws CLI ausente"
+    return 0
+  fi
+  for q in $DLQ_NAMES; do
+    checar_dlq_fila "$q"
+  done
 }
 
 # --- logs do billing (opt-in) --------------------------------------------
 # Exige uma linha com o literal correlationId=<valor> nos logs dos pods.
 checar_logs() {
-  local cid logs
+  local cid logs svc sel
   [ "$CHECK_LOGS" = "1" ] || return 0
   begin
   command -v kubectl >/dev/null 2>&1 || fail "CHECK_LOGS=1 mas kubectl ausente" ""
@@ -380,14 +442,17 @@ checar_logs() {
   expect_2xx "consultar saga para correlationId"
   cid=$(jget '.correlationId // empty')
   [ -n "$cid" ] || fail "saga sem correlationId na resposta" "$LAST_BODY"
-  logs=$(kubectl logs -n "$K8S_NAMESPACE" -l "$K8S_SELECTOR" --all-containers --prefix=false \
-    --since="$LOGS_SINCE" --tail=-1 2>/dev/null) \
-    || fail "kubectl logs falhou (namespace=$K8S_NAMESPACE, selector=$K8S_SELECTOR)" ""
-  if printf '%s\n' "$logs" | grep -Fq -- "correlationId=$cid"; then
-    ok "logs do billing contêm correlationId=$cid"
-  else
-    fail "logs do billing (últimos $LOGS_SINCE) sem correlationId=$cid" ""
-  fi
+  for svc in billing execucao; do
+    sel="$K8S_SELECTOR"; [ "$svc" = "billing" ] || sel="$K8S_EXEC_SELECTOR"
+    logs=$(kubectl logs -n "$K8S_NAMESPACE" -l "$sel" --all-containers --prefix=false \
+      --since="$LOGS_SINCE" --tail=-1 2>/dev/null) \
+      || fail "kubectl logs falhou (namespace=$K8S_NAMESPACE, selector=$sel)" ""
+    if printf '%s\n' "$logs" | grep -Fq -- "correlationId=$cid"; then
+      ok "logs do $svc contêm correlationId=$cid"
+    else
+      fail "logs do $svc (últimos $LOGS_SINCE) sem correlationId=$cid" ""
+    fi
+  done
 }
 
 # --- main ----------------------------------------------------------------
@@ -402,6 +467,7 @@ for sc in $SCENARIOS; do
     feliz) cenario_feliz ;;
     reprovado) cenario_reprovado ;;
     recusado) cenario_recusado ;;
+    falhou) cenario_falhou ;;
     *) fail "cenário desconhecido: $sc" "" ;;
   esac
   checar_logs

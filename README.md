@@ -265,15 +265,16 @@ Evidência de cobertura (`yarn test:cov` na `main`): 407 testes em 40 suítes; c
 
 O script valida a saga da OS contra o ambiente publicado (OS + Billing + gateway fake de pagamento). Cada cenário abre uma OS nova, leva o diagnóstico até o orçamento e exercita um desfecho da saga.
 
-Cenários (`SCENARIOS`, default `feliz reprovado recusado`):
+Cenários (`SCENARIOS`, default `feliz reprovado recusado`; `falhou` é opt-in):
 
 | Cenário | Ação | Estado final esperado |
 |---|---|---|
-| `feliz` | aprova o orçamento e paga no checkout (`aprovar`) | saga `CONCLUIDA` (passo `CONFIRMAR` concluído); cobrança `CONFIRMADA` |
+| `feliz` | aprova o orçamento, executa e paga no checkout (`aprovar`) | saga `CONCLUIDA` (passo `CONFIRMAR` concluído); cobrança `CONFIRMADA` |
 | `reprovado` | reprova o orçamento | saga `COMPENSADA`; OS `REPROVADA` |
-| `recusado` | aprova o orçamento e recusa no checkout (`recusar`) | saga `PENDENTE`; cobrança `RECUSADA` |
+| `recusado` | aprova o orçamento, executa e recusa no checkout (`recusar`) | saga `PENDENTE`; cobrança `RECUSADA` |
+| `falhou` | aprova o orçamento e marca a execução como falha (`PATCH /execucao/:id/falhar`) | saga `COMPENSADA` (passo `EXECUTAR` `COMPENSADO`); compensação `OS_VOLTA_APROVADA`; OS volta a `APROVADA` |
 
-Os cenários `feliz` e `recusado` precisam do `oficina-execucao-service` implantado: a saga passa pelo passo `EXECUTAR` antes de `COBRAR`. Sem ele, a saga fica travada em `EXECUTAR` (`EM_ANDAMENTO`) e o script falha com timeout no passo `COBRAR`.
+A saga tem o passo `EXECUTAR`, servido pelo `oficina-execucao-service`. Os cenários `feliz` e `recusado` esperam a execução `RECEBIDA` (`GET /execucao/:osId`) e chamam `PATCH /execucao/:osId/iniciar` e `PATCH /execucao/:osId/finalizar` com o mesmo token de staff. Sem o `oficina-execucao-service` implantado, a saga fica travada em `EXECUTAR` (`EM_ANDAMENTO`) e o script falha com timeout no passo `COBRAR`.
 
 O script consulta `GET /os/:id/saga` a cada `POLL_INTERVAL` segundos, com até `STEP_TIMEOUT` segundos por passo, e sai com código != 0 no primeiro passo que falhar.
 
@@ -287,18 +288,20 @@ Variáveis de ambiente:
 | `STEP_TIMEOUT` | `30` | segundos máximos de espera por passo |
 | `POLL_INTERVAL` | `2` | segundos entre consultas |
 | `SCENARIOS` | `feliz reprovado recusado` | cenários a rodar, separados por espaço |
-| `CHECK_DLQ` | `auto` | `auto`, `1` (estrito) ou `0` (não verifica a DLQ) |
+| `DLQ_NAMES` | `oficina-billing-dlq oficina-execucao-queue-dlq oficina-os-dlq` | DLQs verificadas, separadas por espaço |
+| `CHECK_DLQ` | `auto` | `auto`, `1` (estrito) ou `0` (não verifica as DLQs) |
 | `AWS_REGION` | `us-east-1` | região das chamadas `aws` |
-| `CHECK_LOGS` | `0` | `1` exige a linha `correlationId=<id>` nos logs após cada cenário |
-| `K8S_NAMESPACE` | `prod` | namespace dos pods do billing |
+| `CHECK_LOGS` | `0` | `1` exige a linha `correlationId=<id>` nos logs do billing e do execucao após cada cenário |
+| `K8S_NAMESPACE` | `prod` | namespace dos pods do billing e do execucao |
 | `K8S_SELECTOR` | `app=oficina-billing-service` | label selector dos pods do billing |
+| `K8S_EXEC_SELECTOR` | `app=oficina-execucao-service` | label selector dos pods do execucao |
 | `LOGS_SINCE` | `15m` | janela de logs do `kubectl` |
 | `CLIENTE_ID` | opcional | cliente existente; sem isso um cliente é criado |
 | `VEICULO_ID` | opcional | veículo existente do `CLIENTE_ID`; sem isso um é criado |
 
-Verificação da DLQ (`oficina-billing-dlq`, via `aws sqs`): com `CHECK_DLQ=auto`, sem `aws` CLI ou com a fila não resolvida, o script avisa que a verificação foi ignorada e segue; com fila que tem mensagens, sempre falha. Com `CHECK_DLQ=1`, qualquer impossibilidade de ler a fila também falha.
+Verificação das DLQs (`DLQ_NAMES`, via `aws sqs`): com `CHECK_DLQ=auto`, sem `aws` CLI ou com a fila não resolvida, o script avisa que a verificação foi ignorada e segue; com fila que tem mensagens, sempre falha. Com `CHECK_DLQ=1`, qualquer impossibilidade de ler a fila também falha.
 
-Verificação de correlationId (`CHECK_LOGS=1`): após cada cenário, o script lê o `correlationId` da saga e procura a linha `correlationId=<id>` em `kubectl logs` dos pods do billing (`K8S_NAMESPACE`, `K8S_SELECTOR`, `LOGS_SINCE`). Sem `kubectl` ou com falha na leitura dos logs, o script encerra com erro.
+Verificação de correlationId (`CHECK_LOGS=1`): após cada cenário, o script lê o `correlationId` da saga e procura a linha `correlationId=<id>` em `kubectl logs` dos pods do billing (`K8S_SELECTOR`) e do execucao (`K8S_EXEC_SELECTOR`), no namespace `K8S_NAMESPACE` e na janela `LOGS_SINCE`. Sem `kubectl` ou com falha na leitura dos logs, o script encerra com erro.
 
 Exemplo:
 
