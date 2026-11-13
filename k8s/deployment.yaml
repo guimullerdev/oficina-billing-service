@@ -17,6 +17,8 @@ spec:
       labels:
         app: oficina-billing-service
     spec:
+      # O pod não fala com a API do Kubernetes: sem token de service account.
+      automountServiceAccountToken: false
       containers:
         - name: oficina-billing-service
           image: ${APP_IMAGE}
