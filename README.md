@@ -22,6 +22,8 @@ Tech Challenge Fase 4 - microsserviço de orçamento e cobrança da oficina (Nes
 
 O Billing é um participante da saga orquestrada pelo `oficina-os-service`. Ele não decide o andamento da saga: reage a comandos/eventos que chegam por SNS/SQS e responde publicando eventos.
 
+**Por que saga orquestrada.** O fluxo da OS atravessa 3 serviços e precisa de compensação (orçamento reprovado, pagamento recusado, execução falha). Com o orquestrador no OS, a máquina de estados fica num só lugar (`saga-definicao.ts`), cada passo tem timeout e compensação declarados e `GET /os/:id/saga` mostra a instância inteira. Na coreografia o fluxo ficaria implícito, espalhado por reações em três repositórios e difícil de rastrear. O custo é o OS virar coordenador: se ele cair, as sagas param, mas nada se perde (outbox + SQS). O Billing segue o mesmo contrato: consome com idempotência por `eventId` e publica pelo outbox. Justificativa completa na [RFC 0006](https://github.com/guimullerdev/oficina-os-service/blob/main/docs/rfc/0006-saga-pattern.md) e no [README do OS](https://github.com/guimullerdev/oficina-os-service#saga-orquestrada).
+
 | Passo da saga | Entrada (do OS) | Ação do Billing | Saída (para o OS) |
 |---|---|---|---|
 | Gerar orçamento | `diagnostico.concluido` | cria o orçamento `GERADO` a partir dos itens do diagnóstico | `orcamento.gerado` |
@@ -151,6 +153,11 @@ Tópico `oficina-billing-events` (criado pelo `oficina-infra-k8s/mensageria`; aq
 ## 5. Rotas
 
 Prefixo global `/billing`; o gateway simulado fica em `/gateway` (fora do prefixo). Swagger em `/billing/docs`. Perfis: `ADMIN`, `ATENDENTE`, `MECANICO` (staff) e `CLIENTE` (token da `oficina-auth-lambda`). O JWT é validado com `JWT_SECRET` e a role vem da claim `role`.
+
+Produção (API Gateway, verificado em 2026-11-17):
+
+- Swagger: https://7eu2kz40xj.execute-api.us-east-1.amazonaws.com/prod/billing/docs
+- Health: https://7eu2kz40xj.execute-api.us-east-1.amazonaws.com/prod/billing/health
 
 | Método | Path | Auth | Roles | Respostas |
 |---|---|---|---|---|
@@ -339,9 +346,10 @@ Operação em janela paga (subir/derrubar o ambiente): [oficina-infra-k8s/docs/r
 ## 10. Débitos declarados
 
 - `execucao.falhou` não é consumido: não há cancelamento/estorno de cobrança quando a execução falha.
-- O status da OS não acompanha a saga: o `oficina-os-service` não move a OS para `APROVADA`/`EM_EXECUCAO` durante o fluxo, então a compensação `OS_VOLTA_APROVADA` (que só age a partir de `EM_EXECUCAO`) vira no-op e a OS fica em `AGUARDANDO_APROVACAO`. O e2e checa a saga, não o status da OS.
 - O catálogo de serviços e peças fica no `oficina-os-service`; o Billing guarda só `refId`, `descricao`, quantidade e preço recebidos no evento. Como o OS não guarda o nome das peças nos itens da OS, elas chegam descritas como "Peça <id>".
 - Credencial AWS do pod é uma chave IAM estática, sem IRSA.
+- OIDC não feito: o CI autentica na AWS com `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` estáticos, não com GitHub OIDC assumindo uma IAM role.
+- Ambiente único: só existe `prod` (ADR 0009 do `oficina-os-service`); a mudança chega à produção sem estágio intermediário.
 - A chamada HTTP ao gateway acontece dentro da transação do `IdempotentProcessor` (segura uma conexão do pool; timeout de 5 s). Se o commit falhar depois do pagamento criado, a mensagem é reentregue e a `Idempotency-Key` (`sagaId:osId`) faz o gateway devolver o mesmo pagamento.
 - Corrida rara: uma violação de unicidade (P2002) que escape do handler é tratada como duplicata e o registro em `mensagens_processadas` se perde; a reentrega vira no-op.
 - Sem retentativa de webhook: se a entrega falha (timeout de 5 s, não-2xx), o gateway simulado só registra o aviso e a página de checkout indica a falha de notificação.
