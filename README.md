@@ -1,5 +1,8 @@
 # oficina-billing-service
 
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=guimullerdev_oficina-billing-service&metric=alert_status)](https://sonarcloud.io/project/overview?id=guimullerdev_oficina-billing-service)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=guimullerdev_oficina-billing-service&metric=coverage)](https://sonarcloud.io/project/overview?id=guimullerdev_oficina-billing-service)
+
 Tech Challenge Fase 4 - microsserviço de orçamento e cobrança da oficina (NestJS 11, Prisma 7, PostgreSQL/RDS), com um gateway de pagamento simulado isolado no mesmo processo.
 
 ## Sumário
@@ -259,7 +262,7 @@ yarn test:cov      # jest --coverage; falha abaixo de 80% (statements, branches,
 - Cobertura exclui `*.module.ts`, `main.ts`, `*.dto.ts` e `*.spec.ts`; o relatório lcov vai para `coverage/lcov.info`.
 - Sonar: projeto `guimullerdev_oficina-billing-service` (`sonar-project.properties`). O passo do CI só roda quando o secret `SONAR_TOKEN` existe e usa a variável de repositório `SONAR_ORGANIZATION`, com `sonar.qualitygate.wait=true` (timeout 300 s).
 
-Evidência de cobertura (`yarn test:cov` na `main`): 407 testes em 40 suítes; cobertura de 98,84% de linhas, 91,95% de branches e 98,43% de funções (threshold global 80%). Dashboard do SonarQube Cloud: https://sonarcloud.io/project/overview?id=guimullerdev_oficina-billing-service
+Evidência de cobertura (`yarn test:cov` na `main`): 407 testes em 40 suítes; cobertura de 98,84% de linhas, 91,95% de branches e 98,43% de funções (threshold global 80%). No SonarQube Cloud: cobertura de 97,6% sobre 3.813 linhas e Quality Gate *OK* (17/11/2026; o badge no topo mostra o valor atual). Dashboard do SonarQube Cloud: https://sonarcloud.io/project/overview?id=guimullerdev_oficina-billing-service
 
 ### 8.1 Validação ponta a ponta da saga (`scripts/e2e-prod.sh`)
 
